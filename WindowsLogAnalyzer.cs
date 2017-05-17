@@ -8,7 +8,7 @@ namespace Analysis
     {
         private Regex CBFSRegex = new Regex(@"^CbFs([A-Za-z]+)(?:: (.*)|)");
         private Regex GroupRegex = new Regex(@"^\[([^\]]+)\]");
-        private Regex RequestRegex = new Regex(@"^([A-Z]+) (.*) HTTP/1\.1");
+        private Regex RequestRegex = new Regex(@"^(?:\d+ ([A-Z]+)|([A-Z]+) (.*) HTTP\/1\.1)");
         private Regex ResponseRegex = new Regex(@"^HTTP/1\.1");
         private Regex TitleRegex = new Regex(@"^[A-Z]+\s+([A-Za-z0-9\.]+)(?:\$[A-Za-z0-9]+|) -");
 
@@ -48,6 +48,18 @@ namespace Analysis
             return baseTemplate;
         }
 
+        private ItemTemplate ReadContextMenuService(ref string line, ItemTemplate baseTemplate)
+        {
+            if (line.StartsWith("Return"))
+            {
+                baseTemplate.Content = "Context Menu";
+                baseTemplate.Title = line;
+                return baseTemplate;
+            }
+            else
+                return new InvalidItemTemplate();
+        }
+
         private ItemTemplate ReadFilesystemMountRegistry(ref string line, ItemTemplate baseTemplate)
         {
             var title = baseTemplate.Title;
@@ -84,10 +96,27 @@ namespace Analysis
         {
             var match = RequestRegex.Match(line);
             if (!match.Success) return new InvalidItemTemplate();
-            var method = match.Groups[1].Value;
-            var path = match.Groups[2].Value;
-            baseTemplate.Content = $"{method} {path}";
-            baseTemplate.Open = true;
+
+            var sftpMethodMatch = match.Groups[1];
+            var httpMethodMatch = match.Groups[2];
+            var pathMatch = match.Groups[3];
+
+            if (sftpMethodMatch.Success)
+            {
+                var method = sftpMethodMatch.Value;
+                baseTemplate.Content = method;
+            }
+            else if (httpMethodMatch.Success)
+            {
+                var method = httpMethodMatch.Value;
+                var path = pathMatch.Value;
+                baseTemplate.Content = $"{method} {path}";
+                baseTemplate.Open = true;
+            }
+            else
+            {
+                throw new InvalidOperationException();
+            }
 
             return baseTemplate;
         }
@@ -135,6 +164,9 @@ namespace Analysis
                 case "Ch.Iterate.Mountainduck.Fs.Cbfs.CBFSFilesystem":
                     return ReadCBFSFilesystem(ref line, baseTemplate);
 
+                case "ch.iterate.mountainduck.nativity.ContextMenuService":
+                    return ReadContextMenuService(ref line, baseTemplate);
+
                 default:
                     return new InvalidItemTemplate();
             }
@@ -172,6 +204,7 @@ namespace Analysis
                 case "ch.cyberduck.transcript.response":
                 case "ch.iterate.mountainduck.fs.PooledSessionFilesystem":
                 case "Ch.Iterate.Mountainduck.Fs.Cbfs.CBFSFilesystem":
+                case "ch.iterate.mountainduck.nativity.ContextMenuService":
                     return new SingleItemTemplate();
 
                 default:
